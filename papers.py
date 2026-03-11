@@ -21,14 +21,14 @@ def safe_get(url, timeout=8):
         return None
 
 # ==============================
-# 1. arXiv（含摘要，API 直接返回）
+# 1. arXiv（每次最多3篇）
 # ==============================
 
 def get_arxiv(keywords):
     print("[arXiv] 开始抓取...")
     try:
         kw_query = "+OR+".join([f'ti:"{k}"' for k in keywords[:6]])
-        url = f"https://export.arxiv.org/api/query?search_query={kw_query}&sortBy=submittedDate&sortOrder=descending&max_results=15"
+        url = f"https://export.arxiv.org/api/query?search_query={kw_query}&sortBy=submittedDate&sortOrder=descending&max_results=20"
         r = safe_get(url)
         if not r:
             return []
@@ -41,13 +41,11 @@ def get_arxiv(keywords):
             title = entry.find("atom:title", ns).text.strip().replace("\n", " ")
             abstract = entry.find("atom:summary", ns).text.strip().replace("\n", " ")
             abstract = abstract[:300] + "..." if len(abstract) > 300 else abstract
-            papers.append({
-                "title": title,
-                "abstract": abstract,
-                "source": "arXiv"
-            })
+            papers.append({"title": title, "abstract": abstract, "source": "arXiv"})
+            if len(papers) >= 10:  # 每个来源最多3篇
+                break
 
-        print(f"[arXiv] 获取到 {len(papers)} 篇（含摘要）")
+        print(f"[arXiv] 获取到 {len(papers)} 篇")
         return papers
 
     except Exception as e:
@@ -55,51 +53,43 @@ def get_arxiv(keywords):
         return []
 
 # ==============================
-# 2. NBER（含摘要，详情页抓取）
+# 2. NBER（用 RSS 更稳定，每次最多3篇）
 # ==============================
 
 def get_nber(keywords):
     print("[NBER] 开始抓取...")
     try:
-        r = safe_get("https://www.nber.org/papers")
+        # 用 NBER RSS 代替抓 HTML，更稳定
+        r = safe_get("https://www.nber.org/rss/new_working_papers.xml")
         if not r:
             return []
 
-        soup = BeautifulSoup(r.text, "html.parser")
+        root = ET.fromstring(r.text)
         papers = []
 
-        for card in soup.select(".paper-card")[:20]:
-            title_el = card.select_one(".title")
-            if not title_el:
+        for item in root.findall(".//item"):
+            title_el = item.find("title")
+            desc_el  = item.find("description")
+            if title_el is None or not title_el.text:
                 continue
+
             title = title_el.text.strip()
 
+            # 关键词过滤
             if not any(k.lower() in title.lower() for k in keywords):
                 continue
 
-            # 抓摘要详情页
-            link_el = title_el.find("a") or card.find("a", href=True)
+            # 摘要从 description 取
             abstract = ""
-            if link_el and link_el.get("href"):
-                detail_url = "https://www.nber.org" + link_el["href"]
-                detail = safe_get(detail_url, timeout=10)
-                if detail:
-                    detail_soup = BeautifulSoup(detail.text, "html.parser")
-                    abs_el = detail_soup.select_one(".abstract, .paper-abstract, #abstract")
-                    if abs_el:
-                        abstract = abs_el.text.strip()[:300] + "..."
-                time.sleep(0.5)
+            if desc_el is not None and desc_el.text:
+                soup = BeautifulSoup(desc_el.text, "html.parser")
+                abstract = soup.get_text().strip()[:300] + "..."
 
-            papers.append({
-                "title": title,
-                "abstract": abstract if abstract else "（摘要获取失败）",
-                "source": "NBER"
-            })
-
-            if len(papers) >= 5:
+            papers.append({"title": title, "abstract": abstract or "（摘要获取失败）", "source": "NBER"})
+            if len(papers) >= 10:
                 break
 
-        print(f"[NBER] 获取到 {len(papers)} 篇（含摘要）")
+        print(f"[NBER] 获取到 {len(papers)} 篇")
         return papers
 
     except Exception as e:
@@ -107,7 +97,7 @@ def get_nber(keywords):
         return []
 
 # ==============================
-# 3. 四大顶刊 RSS（含摘要）
+# 3. 四大顶刊 RSS（每刊最多2篇，共最多8篇）
 # ==============================
 
 def get_top_journals(keywords):
@@ -124,47 +114,47 @@ def get_top_journals(keywords):
 
     for name, url in feeds:
         try:
-            r = safe_get(url, timeout=15)
+            r = safe_get(url, timeout=8)
             if not r:
+                print(f"[{name}] 无法访问，跳过")
                 continue
 
             root = ET.fromstring(r.text)
+            count = 0
 
-            for item in root.findall(".//item")[:15]:
+            for item in root.findall(".//item"):
                 title_el = item.find("title")
                 if title_el is None or not title_el.text:
                     continue
                 title = title_el.text.strip()
 
-                if not any(k.lower() in title.lower() for k in keywords):
+                # 关键词过滤（顶刊论文标题不一定含关键词，放宽匹配）
+                title_lower = title.lower()
+                matched = any(k.lower() in title_lower for k in keywords)
+
+                # 如果标题匹配不上，尝试从 description 里匹配
+                if not matched:
+                    desc_el = item.find("description")
+                    if desc_el is not None and desc_el.text:
+                        desc_lower = desc_el.text.lower()
+                        matched = any(k.lower() in desc_lower for k in keywords)
+
+                if not matched:
                     continue
 
-                # 从 <description> 取摘要
+                # 摘要
                 abstract = ""
                 desc_el = item.find("description")
                 if desc_el is not None and desc_el.text:
-                    desc_soup = BeautifulSoup(desc_el.text, "html.parser")
-                    abstract = desc_soup.get_text().strip()[:300] + "..."
+                    soup = BeautifulSoup(desc_el.text, "html.parser")
+                    abstract = soup.get_text().strip()[:300] + "..."
 
-                # description 没有则抓详情页
-                if not abstract or len(abstract) < 30:
-                    link_el = item.find("link")
-                    if link_el is not None and link_el.text:
-                        detail = safe_get(link_el.text.strip(), timeout=10)
-                        if detail:
-                            ds = BeautifulSoup(detail.text, "html.parser")
-                            abs_el = ds.select_one(".abstract, #abstract, .article-abstract")
-                            if abs_el:
-                                abstract = abs_el.get_text().strip()[:300] + "..."
-                        time.sleep(0.5)
+                papers.append({"title": title, "abstract": abstract or "（摘要获取失败）", "source": name})
+                count += 1
+                if count >= 10:  # 每个刊最多2篇
+                    break
 
-                papers.append({
-                    "title": title,
-                    "abstract": abstract if abstract else "（摘要获取失败）",
-                    "source": name
-                })
-
-            print(f"[{name}] 获取到相关论文 {sum(1 for p in papers if p['source']==name)} 篇")
+            print(f"[{name}] 获取到 {count} 篇")
 
         except Exception as e:
             print(f"[{name}] 失败，跳过：{e}")
@@ -190,5 +180,5 @@ def get_all_papers(keywords):
             seen.add(p["title"])
             unique.append(p)
 
-    print(f"[汇总] 共找到相关论文 {len(unique)} 篇")
-    return unique[:12]
+    print(f"[汇总] 共找到相关论文 {len(unique)} 篇，来源：{ {p['source'] for p in unique} }")
+    return unique
