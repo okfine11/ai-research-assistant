@@ -344,18 +344,6 @@ def main():
     send_feishu(msg)
 
 
-    # ===== 临时测试：发全部三种消息 =====
-    # 临时测试论文简报，测完改回来
-    msg = generate_paper_report()
-
-    msg += f"\n\n[系统时间] {today} {hour:02d}:{minute:02d}"
-    print(msg)
-    send_feishu(msg)
-
-
-
-
-
 
 if __name__ == "__main__":
     main()
