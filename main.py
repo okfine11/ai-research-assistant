@@ -17,13 +17,36 @@ GITHUB_REPO  = "ai-research-assistant"
 
 # 你的研究关键词（用于筛选论文）
 KEYWORDS = [
-    "belt and road",
-    "patent",
-    "innovation",
-    "technology spillover",
-    "trade",
-    "global value chain"
+    # 一带一路 / 贸易
+    "belt and road", "trade policy", "export", "foreign direct investment",
+    "comparative advantage", "tariff", "global value chain",
+    # 专利 / 创新
+    "patent", "patent citation", "innovation", "intellectual property",
+    "r&d", "knowledge spillover", "technology spillover", "technology transfer",
+    # AI / NLP
+    "large language model", "natural language processing", "text analysis",
+    "machine learning", "generative ai", "automation"
 ]
+
+# 你的研究背景（用于AI分析每篇论文的价值）
+MY_RESEARCH_BACKGROUND = """
+我是一名经济学研究生，导师方向为国际贸易。
+
+当前主要论文：
+研究"一带一路"倡议对沿线国家专利引用网络的影响，
+使用专利引用数据构建基准回归模型，
+并通过 event study 识别政策冲击的动态效应，
+核心关注技术溢出与知识流动机制。
+
+研究方法：面板数据回归、event study、双重差分（DID）
+数据来源：专利引用数据（USPTO/WIPO）、贸易数据
+技术能力：熟悉 Python，了解 LLM 与自然语言处理，有意将文本分析方法引入经济学实证研究。
+
+感兴趣的延伸方向：
+- 技术溢出的异质性（行业/国家/距离）
+- NLP 方法处理专利文本
+- 全球价值链与创新
+"""
 
 def beijing_now():
     return datetime.utcnow() + timedelta(hours=8)
@@ -93,89 +116,54 @@ def send_feishu(msg):
     print(f"[飞书] 发送状态：{r.status_code}")
 
 # ==============================
-# 抓取论文
-# ==============================
-
-def get_nber_papers():
-
-    url = "https://www.nber.org/papers"
-
-    r = requests.get(url)
-
-    soup = BeautifulSoup(r.text,"html.parser")
-
-    papers = []
-
-    cards = soup.select(".paper-card")
-
-    for c in cards:
-
-        title = c.select_one(".title")
-
-        if title:
-
-            title_text = title.text.strip()
-
-            papers.append(title_text)
-
-    return papers
-
-# ==============================
-# 过滤与你研究相关论文
-# ==============================
-
-def filter_related_papers(papers):
-
-    related = []
-
-    for p in papers:
-
-        p_lower = p.lower()
-
-        for k in KEYWORDS:
-
-            if k in p_lower:
-
-                related.append(p)
-
-                break
-
-    return related[:5]
-
-# ==============================
 # 文献简报生成
 # ==============================
 
 def generate_paper_report():
+    from papers import get_all_papers
+    papers = get_all_papers(KEYWORDS)
 
-    papers = get_nber_papers()
+    if not papers:
+        today = beijing_now().strftime("%Y-%m-%d")
+        return f"📊 经济学研究前沿日报\n{today}\n\n今日暂未找到相关论文。"
 
-    related = filter_related_papers(papers)
+    # 按来源分组，构建 prompt
+    paper_text = ""
+    by_source = {}
+    for p in papers:
+        by_source.setdefault(p["source"], []).append(p)
 
-    if len(related) == 0:
-
-        related = papers[:5]
-
-    paper_text = "\n".join(related)
+    for src, items in by_source.items():
+        paper_text += f"\n【{src}】\n"
+        for p in items:
+            paper_text += f"标题：{p['title']}\n"
+            paper_text += f"摘要：{p['abstract']}\n\n"
 
     prompt = f"""
-今天最新经济学论文标题如下：
+你是一个经济学研究助理。以下是今天从多个来源获取的最新论文（含标题和摘要）：
 
 {paper_text}
 
-请生成一份经济学研究前沿日报。
+我的研究背景如下：
+{MY_RESEARCH_BACKGROUND}
+
+请生成一份经济学研究前沿日报，对每篇论文按以下格式输出：
+
+📄 标题：xxx
+来源：xxx
+摘要：2-3句话总结研究问题、方法和主要发现
+你能用上：结合我的研究背景，说明这篇论文对我有什么具体帮助（思路/方法/数据/角度等），如果关联不大就直接写"关联较弱"
+
+---
 
 要求：
-1 中文
-2 每篇论文一句话总结
-3 语气像科研简报
-4 适合经济学研究生阅读
+- 全程中文
+- 语气专业，像科研简报
+- "你能用上"要具体，不要泛泛而谈
 """
 
     report = call_llm(prompt)
-
     today = beijing_now().strftime("%Y-%m-%d")
-
     return f"📊 经济学研究前沿日报\n{today}\n\n{report}"
 
 # ==============================
