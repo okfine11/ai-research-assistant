@@ -248,6 +248,8 @@ def generate_supervisor_message(tasks):
 
 def main():
 
+    minute = now.minute
+
     tasks = load_tasks()
 
     hour = beijing_now().hour
@@ -256,12 +258,12 @@ def main():
     if hour == 1:
 
         msg = generate_paper_report()
-
     # 其它时间为督促
     else:
 
-        msg = generate_supervisor_message(tasks)
+        msg = generate_supervisor_message(tasks) + f"现在时间为{today} {hour}"
 
+    msg += f"\n\n[系统时间] {today} {hour:02d}:{minute:02d}"
     send_feishu(msg)
 
 # ==============================
