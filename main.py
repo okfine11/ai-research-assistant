@@ -8,7 +8,8 @@ from bs4 import BeautifulSoup
 # 配置
 # ==============================
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# ✅ 修复②：统一用 DEEPSEEK_API_KEY（与 run.yml secrets 保持一致）
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 FEISHU_WEBHOOK = os.getenv("FEISHU_WEBHOOK")
 
 # 你的研究关键词（用于筛选论文）
@@ -29,58 +30,64 @@ def beijing_now():
 # ==============================
 
 def load_tasks():
+    # ✅ 修复①：用绝对路径，确保 GitHub Actions 环境下也能找到文件
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    task_file = os.path.join(base_dir, "tasks.json")
 
-    if not os.path.exists("tasks.json"):
+    if not os.path.exists(task_file):
+        print(f"[警告] tasks.json 不存在，路径：{task_file}")
         return {}
 
-    with open("tasks.json","r",encoding="utf-8") as f:
-        return json.load(f)
+    with open(task_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+        print(f"[调试] 读取到 tasks.json，共 {len(data)} 个日期条目")
+        return data
 
 # ==============================
 # 调用 AI
 # ==============================
 
 def call_llm(prompt):
-
-    url = "https://api.openai.com/v1/chat/completions"
+    # ✅ 修复②：改用 DeepSeek API
+    url = "https://api.deepseek.com/v1/chat/completions"
 
     headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type":"application/json"
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Content-Type": "application/json"
     }
 
     data = {
-        "model":"gpt-4o-mini",
-        "messages":[
-            {"role":"system","content":"你是一个经济学研究助理"},
-            {"role":"user","content":prompt}
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "system", "content": "你是一个经济学研究助理"},
+            {"role": "user", "content": prompt}
         ],
-        "temperature":0.7
+        "temperature": 0.7
     }
 
-    r = requests.post(url,headers=headers,json=data)
+    try:
+        r = requests.post(url, headers=headers, json=data, timeout=30)
+        result = r.json()
 
-    result = r.json()
+        if "choices" not in result:
+            return f"AI生成失败：{result}"
 
-    if "choices" not in result:
-        return f"AI生成失败：{result}"
+        return result["choices"][0]["message"]["content"]
 
-    return result["choices"][0]["message"]["content"]
+    except Exception as e:
+        return f"请求异常：{e}"
 
 # ==============================
 # 发送飞书
 # ==============================
 
 def send_feishu(msg):
-
     data = {
-        "msg_type":"text",
-        "content":{
-            "text":msg
-        }
+        "msg_type": "text",
+        "content": {"text": msg}
     }
-
-    requests.post(FEISHU_WEBHOOK,json=data)
+    r = requests.post(FEISHU_WEBHOOK, json=data, timeout=10)
+    print(f"[飞书] 发送状态：{r.status_code}")
 
 # ==============================
 # 抓取论文
@@ -173,24 +180,20 @@ def generate_paper_report():
 # ==============================
 
 def generate_supervisor_message(tasks):
-
     today = beijing_now().strftime("%Y-%m-%d")
+    task_list = tasks.get(today, [])
 
-    task_list = tasks.get(today,[])
+    print(f"[调试] 今天日期：{today}，找到任务数：{len(task_list)}")
 
-    if len(task_list)==0:
-
+    if len(task_list) == 0:
         task_text = "今天没有设定任务"
-
     else:
-
-        task_text = "\n".join(task_list)
+        task_text = "\n".join([f"- {t}" for t in task_list])
 
     hour = beijing_now().hour
 
-    # 上午督促
-    if hour < 5:
-
+    # ✅ 修复：时间段与实际北京时间对应
+    if hour < 12:
         prompt = f"""
 你是一个严格但理性的科研督促助手。
 
@@ -198,46 +201,23 @@ def generate_supervisor_message(tasks):
 
 {task_text}
 
-现在是上午。
-
-请写一段督促开始科研的话。
-
-语气：
-理性、像导师提醒学生
-不要太生硬
+现在是上午，请写一段督促开始科研的话。语气：理性、像导师提醒学生，不要太生硬。
 """
-
-    # 下午追问
-    elif hour < 10:
-
+    elif hour < 18:
         prompt = f"""
 学生今天任务：
 
 {task_text}
 
-现在已经是下午。
-
-请写一段询问科研进度的话。
-
-语气：
-像导师提醒进度
-稍微有一点压力
+现在已经是下午，请写一段询问科研进度的话。语气：像导师提醒进度，稍微有一点压力。
 """
-
-    # 晚上总结
     else:
-
         prompt = f"""
 学生今天计划完成：
 
 {task_text}
 
-现在是晚上。
-
-请写一段总结今天科研情况并鼓励继续推进的话。
-
-语气：
-鼓励但保持理性
+现在是晚上，请写一段总结今天科研情况并鼓励继续推进的话。语气：鼓励但保持理性。
 """
 
     return call_llm(prompt)
@@ -247,29 +227,24 @@ def generate_supervisor_message(tasks):
 # ==============================
 
 def main():
-
     now = beijing_now()
     today = now.strftime("%Y-%m-%d")
     hour = now.hour
     minute = now.minute
 
+    print(f"[启动] 北京时间：{today} {hour:02d}:{minute:02d}")
+
     tasks = load_tasks()
 
-    # 北京时间 09:30
-    if hour == 1:
-
+    # ✅ 修复：北京时间 09:30（UTC 01:30）发论文简报，其余时间督促
+    if hour == 9 and minute >= 30:
         msg = generate_paper_report()
-    # 其它时间为督促
     else:
-
         msg = generate_supervisor_message(tasks)
 
     msg += f"\n\n[系统时间] {today} {hour:02d}:{minute:02d}"
-    print(f'{today} {hour:02d}:{minute:02d}')
+    print(msg)
     send_feishu(msg)
 
-# ==============================
-
 if __name__ == "__main__":
-
     main()
