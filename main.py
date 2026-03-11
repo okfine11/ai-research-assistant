@@ -54,8 +54,13 @@ def generate_ai_message(tasks):
     r = requests.post(url,headers=headers,json=data)
 
     result = r.json()
-
-    return result["choices"][0]["message"]["content"]
+    
+    print(result)
+    if "choices" in result:
+        return result["choices"][0]["message"]["content"]
+    else:
+        return "AI生成失败：" + str(result)
+        
 
 def send_feishu(text):
 
