@@ -259,24 +259,12 @@ def main():
 
 
     # ===== 临时测试：发全部三种消息 =====
-    for test_hour, label in [(9, "上午"), (15, "下午"), (21, "晚上")]:
-        task_list = tasks.get(today) or tasks.get("default", [])
-        task_text = "\n".join([f"- {t}" for t in task_list]) if task_list else "今天没有设定任务"
+    # 临时测试论文简报，测完改回来
+    msg = generate_paper_report()
 
-        if test_hour < 12:
-            prompt = f"你是科研督促助手。学生今天的任务：\n{task_text}\n现在是上午，请写一段督促开始科研的话。语气：理性、像导师提醒学生，不要太生硬。"
-        elif test_hour < 18:
-            prompt = f"学生今天任务：\n{task_text}\n现在已经是下午，请写一段询问科研进度的话。语气：像导师提醒进度，稍微有一点压力。"
-        else:
-            github_link = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/edit/main/tasks.json"
-            prompt = f"学生今天计划完成：\n{task_text}\n现在是晚上，请写一段总结今天科研情况并鼓励继续推进的话。语气：鼓励但保持理性。"
-
-        msg = call_llm(prompt)
-        if test_hour >= 21:
-            msg += f"\n\n📝 更新明天的任务：\nhttps://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/edit/main/tasks.json"
-        msg += f"\n\n[测试-{label}] {today}"
-        print(msg)
-        send_feishu(msg)
+    msg += f"\n\n[系统时间] {today} {hour:02d}:{minute:02d}"
+    print(msg)
+    send_feishu(msg)
 
 
 
