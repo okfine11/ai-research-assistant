@@ -1,40 +1,35 @@
 import requests
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
-import time
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"}
 
 # ==============================
-# 所有 RSS 链接（集中管理，方便维护）
+# 所有来源链接（集中管理）
 # ==============================
 
 NEP_FEEDS = [
-    ("NEP-INT", "https://nep.repec.org/nep-int.rss.xml"),   # 国际贸易
-    ("NEP-INO", "https://nep.repec.org/nep-ino.rss.xml"),   # 创新
-    ("NEP-AIN", "https://nep.repec.org/nep-ain.rss.xml"),   # AI经济
-    ("NEP-IPR", "https://nep.repec.org/nep-ipr.rss.xml"),   # 知识产权
-    ("NEP-TEC", "https://nep.repec.org/nep-tid.rss.xml"),   # 技术与工业发展
-    ("NEP-CNA", "https://nep.repec.org/nep-cna.rss.xml"),   # 中国经济
+    ("NEP-INT", "https://nep.repec.org/rss/nep-int.rss.xml"),   # 国际贸易
+    ("NEP-INO", "https://nep.repec.org/rss/nep-ino.rss.xml"),   # 创新
+    ("NEP-AIN", "https://nep.repec.org/rss/nep-ain.rss.xml"),   # AI经济
+    ("NEP-IPR", "https://nep.repec.org/rss/nep-ipr.rss.xml"),   # 知识产权
+    ("NEP-CNA", "https://nep.repec.org/rss/nep-cna.rss.xml"),   # 中国经济
 ]
 
 JOURNAL_FEEDS = [
     ("QJE",    "https://academic.oup.com/rss/site_5504/3365.xml"),
     ("JPE",    "https://www.journals.uchicago.edu/action/showFeed?type=etoc&feed=rss&jc=jpe"),
+    ("JPE-MA", "https://www.journals.uchicago.edu/action/showFeed?type=etoc&feed=rss&jc=jpema"),
     ("REStud", "https://academic.oup.com/rss/site_5508/3369.xml"),
     ("JIE",    "https://rss.sciencedirect.com/publication/science/00221996"),
     ("JDE",    "https://rss.sciencedirect.com/publication/science/03043878"),
 ]
 
-# 供健康检查使用
-ALL_FEEDS = (
-    [("NBER_RSS", "https://econpapers.repec.org/rss/nberwo.xml")]
-    + NEP_FEEDS
-    + JOURNAL_FEEDS
-)
+# 供健康检查用
+ALL_FEEDS = NEP_FEEDS + JOURNAL_FEEDS
 
 # ==============================
-# 工具：安全请求
+# 安全请求
 # ==============================
 
 def safe_get(url, timeout=8):
@@ -50,7 +45,7 @@ def safe_get(url, timeout=8):
 
 # ==============================
 # 解析 RSS，提取标题+摘要
-# keywords=None 表示不过滤（顶刊全量返回，由AI来判断）
+# keywords=None 不做关键词过滤
 # ==============================
 
 def parse_rss(r, source, keywords=None, limit=10):
@@ -77,7 +72,7 @@ def parse_rss(r, source, keywords=None, limit=10):
                     abstract = soup.get_text().strip()[:400]
                     break
 
-            # 关键词过滤（None = 不过滤）
+            # 关键词过滤
             if keywords is not None:
                 combined = (title + " " + abstract).lower()
                 if not any(k.lower() in combined for k in keywords):
@@ -108,11 +103,9 @@ def get_arxiv(keywords):
         r = safe_get(url)
         if not r:
             return []
-
         root = ET.fromstring(r.text)
         ns = {"atom": "http://www.w3.org/2005/Atom"}
         papers = []
-
         for entry in root.findall("atom:entry", ns):
             title_el = entry.find("atom:title", ns)
             abs_el   = entry.find("atom:summary", ns)
@@ -123,7 +116,6 @@ def get_arxiv(keywords):
             papers.append({"title": title, "abstract": abstract, "source": "arXiv"})
             if len(papers) >= 10:
                 break
-
         print(f"[arXiv] 获取到 {len(papers)} 篇")
         return papers
     except Exception as e:
@@ -131,19 +123,35 @@ def get_arxiv(keywords):
         return []
 
 # ==============================
-# 2. NBER
+# 2. SSRN（替代NBER，经济学预印本）
 # ==============================
 
-def get_nber(keywords):
-    print("[NBER] 开始抓取...")
-    url = "https://econpapers.repec.org/rss/nberwo.xml"
+def get_ssrn(keywords):
+    print("[SSRN] 开始抓取...")
+    # SSRN 经济学最新论文 RSS
+    url = "https://papers.ssrn.com/sol3/Jeljour_results.cfm?form_name=journalBrowse&journal_id=928557&Network=no&SortOrder=ab_approval_date&all.x=yes"
     r = safe_get(url)
     if not r:
-        print("[NBER] 失败，跳过")
+        print("[SSRN] 失败，跳过")
         return []
-    papers = parse_rss(r, "NBER", keywords, limit=10)
-    print(f"[NBER] 获取到 {len(papers)} 篇")
-    return papers
+    try:
+        soup = BeautifulSoup(r.text, "html.parser")
+        papers = []
+        for item in soup.select(".title a, .paper-title a")[:50]:
+            title = item.text.strip()
+            if not title or len(title) < 10:
+                continue
+            combined = title.lower()
+            if not any(k.lower() in combined for k in keywords):
+                continue
+            papers.append({"title": title, "abstract": "（SSRN摘要需登录查看）", "source": "SSRN"})
+            if len(papers) >= 10:
+                break
+        print(f"[SSRN] 获取到 {len(papers)} 篇")
+        return papers
+    except Exception as e:
+        print(f"[SSRN] 解析失败，跳过：{e}")
+        return []
 
 # ==============================
 # 3. NEP 专题（关键词过滤）
@@ -165,7 +173,7 @@ def get_nep(keywords):
     return all_papers
 
 # ==============================
-# 4. 顶刊（不过滤关键词，全量返回交给AI判断）
+# 4. 顶刊（不过滤关键词，全量给AI判断）
 # ==============================
 
 def get_top_journals():
@@ -177,7 +185,6 @@ def get_top_journals():
             if not r:
                 print(f"[{name}] 无法访问，跳过")
                 continue
-            # 顶刊不做关键词过滤，取最新10篇交给AI筛选
             papers = parse_rss(r, name, keywords=None, limit=10)
             print(f"[{name}] 获取到 {len(papers)} 篇")
             all_papers += papers
@@ -192,9 +199,9 @@ def get_top_journals():
 def get_all_papers(keywords):
     all_papers = []
     all_papers += get_arxiv(keywords)
-    all_papers += get_nber(keywords)
+    all_papers += get_ssrn(keywords)
     all_papers += get_nep(keywords)
-    all_papers += get_top_journals()   # 顶刊不传keywords，全量给AI
+    all_papers += get_top_journals()
 
     # 去重
     seen = set()
