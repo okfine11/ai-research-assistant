@@ -9,7 +9,7 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chr
 # 工具：安全请求，失败返回 None
 # ==============================
 
-def safe_get(url, timeout=15):
+def safe_get(url, timeout=8):
     try:
         r = requests.get(url, headers=HEADERS, timeout=timeout)
         if r.status_code == 200:
