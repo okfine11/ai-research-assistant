@@ -92,7 +92,7 @@ def call_llm(prompt):
     }
 
     try:
-        r = requests.post(url, headers=headers, json=data, timeout=30)
+        r = requests.post(url, headers=headers, json=data, timeout=120)
         result = r.json()
 
         if "choices" not in result:
