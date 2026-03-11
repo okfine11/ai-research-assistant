@@ -10,6 +10,7 @@ on:
     - cron: '0 2 * * *'
     - cron: '0 7 * * *'
     - cron: '0 13 * * *'
+    - cron: '04 14 * * *'
 
 jobs:
   run-script:
