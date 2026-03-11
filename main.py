@@ -203,6 +203,8 @@ def generate_supervisor_message(tasks):
 
 现在是上午，请写一段督促开始科研的话。语气：理性、像导师提醒学生，不要太生硬。
 """
+        return call_llm(prompt)
+
     elif hour < 18:
         prompt = f"""
 学生今天任务：
@@ -211,7 +213,8 @@ def generate_supervisor_message(tasks):
 
 现在已经是下午，请写一段询问科研进度的话。语气：像导师提醒进度，稍微有一点压力。
 """
-        
+        return call_llm(prompt)
+
     else:
         github_link = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/edit/main/tasks.json"
         prompt = f"""
@@ -221,9 +224,8 @@ def generate_supervisor_message(tasks):
 
 现在是晚上，请写一段总结今天科研情况并鼓励继续推进的话。语气：鼓励但保持理性。
 """
-    # AI生成督促内容后，再拼接编辑链接
-    ai_msg = call_llm(prompt)
-    return f"{ai_msg}\n\n📝 更新明天的任务：\n{github_link}"
+        ai_msg = call_llm(prompt)
+        return f"{ai_msg}\n\n📝 更新明天的任务：\n{github_link}"
 
     
     return call_llm(prompt)
