@@ -231,13 +231,17 @@ def generate_paper_report():
     # ==============================
     # 第二步：AI 生成最终简报
     # ==============================
+    core_count  = len(core_papers)
+    watch_count = len(watch_papers)
+
     report_prompt = f"""
 请生成一份经济学研究前沿日报，分两个板块，每篇按固定格式输出。
 
 【板块一：与你研究直接相关】
-{core_text if core_text else "今日暂无直接相关论文。\n"}
+{core_text if core_text else "今日暂无直接相关论文。"}
+
 【板块二：值得关注】
-{watch_text if watch_text else "今日暂无推荐。\n"}
+{watch_text if watch_text else "今日暂无推荐。"}
 
 每篇论文统一格式如下：
 
@@ -247,11 +251,9 @@ def generate_paper_report():
 摘要：2-3句话，总结研究问题、方法、主要发现
 你能用上 / 为什么推给你：xxx
 
----
-
 输出要求：
-- 板块一标题用：🎯 与你研究直接相关（N篇）
-- 板块二标题用：👀 值得关注（N篇）
+- 板块一标题用：🎯 与你研究直接相关（{core_count}篇）
+- 板块二标题用：👀 值得关注（{watch_count}篇）
 - 全程中文，标题保留英文原文并附中文翻译
 - 语气专业，像科研简报
 - 板块一的"你能用上"要具体指出能用在哪个环节
