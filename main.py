@@ -12,6 +12,9 @@ from bs4 import BeautifulSoup
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 FEISHU_WEBHOOK = os.getenv("FEISHU_WEBHOOK")
 
+GITHUB_OWNER = "okfine11"    
+GITHUB_REPO  = "ai-research-assistant" 
+
 # 你的研究关键词（用于筛选论文）
 KEYWORDS = [
     "belt and road",
