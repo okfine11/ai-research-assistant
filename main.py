@@ -120,94 +120,148 @@ def send_feishu(msg):
 # ==============================
 
 def generate_paper_report():
+    import json as json_lib
     from papers import get_all_papers
+
+    today = beijing_now().strftime("%Y-%m-%d")
+
+    # ==============================
+    # 抓取论文
+    # ==============================
     papers = get_all_papers(KEYWORDS)
 
     if not papers:
-        today = beijing_now().strftime("%Y-%m-%d")
         return f"📊 经济学研究前沿日报\n{today}\n\n今日暂未找到相关论文。"
 
-    # 构建论文文本
+    # ==============================
+    # 构建论文列表文本
+    # ==============================
     paper_text = ""
     for i, p in enumerate(papers):
         paper_text += f"[{i}] 来源：{p['source']}\n标题：{p['title']}\n摘要：{p['abstract']}\n\n"
 
-    # 第一步：让AI判断关联性，返回JSON
+    # ==============================
+    # 第一步：AI 分类（core / watch / skip）
+    # ==============================
     filter_prompt = f"""
 我的研究背景：
 {MY_RESEARCH_BACKGROUND}
 
-以下论文列表（含编号）：
+以下是今日论文列表（含编号）：
 {paper_text}
 
-请判断每篇论文与我研究的关联性。
-只返回JSON数组，格式如下，不要输出任何其他内容：
+请对每篇论文分类，只返回JSON数组，不要输出任何其他内容：
 [
-  {{"index": 0, "relevant": true, "use_for": "具体说明能用在哪里（思路/方法/数据/角度）"}},
-  {{"index": 1, "relevant": false, "use_for": ""}}
+  {{
+    "index": 0,
+    "tier": "core",
+    "reason": "与我当前论文直接相关，具体说明能用在哪里（思路/方法/数据/角度）"
+  }},
+  {{
+    "index": 1,
+    "tier": "watch",
+    "reason": "虽与当前论文关联不强，但涉及xxx新方法/延伸方向/前沿热点，值得关注"
+  }},
+  {{
+    "index": 2,
+    "tier": "skip",
+    "reason": ""
+  }}
 ]
 
-判断标准：关联较弱或完全无关则 relevant 为 false。
+分类标准：
+- core：与我当前研究直接相关（方法、数据、主题高度匹配）
+- watch：关联不强，但涉及我可能借鉴的新方法、感兴趣的延伸方向、或经济学重要前沿
+- skip：与我的研究和兴趣完全无关
 """
 
-    import json as json_lib
     filter_result = call_llm(filter_prompt)
 
-    # 解析JSON，失败则保留全部
-    relevant_map = {}
+    # ==============================
+    # 解析 JSON 分类结果
+    # ==============================
+    tier_map = {}      # index -> "core" or "watch"
+    reason_map = {}    # index -> reason
+
     try:
         clean = filter_result.strip()
-        # 去掉可能的markdown代码块
         if "```" in clean:
-            clean = clean.split("```")[1]
-            if clean.startswith("json"):
-                clean = clean[4:]
+            parts = clean.split("```")
+            for part in parts:
+                if part.startswith("json"):
+                    clean = part[4:].strip()
+                    break
+                elif part.strip().startswith("["):
+                    clean = part.strip()
+                    break
         items = json_lib.loads(clean)
         for item in items:
-            if item.get("relevant"):
-                relevant_map[item["index"]] = item.get("use_for", "")
+            tier = item.get("tier", "skip")
+            if tier in ("core", "watch"):
+                tier_map[item["index"]] = tier
+                reason_map[item["index"]] = item.get("reason", "")
+        print(f"[分类] core: {sum(1 for t in tier_map.values() if t=='core')} 篇，watch: {sum(1 for t in tier_map.values() if t=='watch')} 篇")
     except Exception as e:
-        print(f"[过滤] JSON解析失败，保留全部论文：{e}")
-        for i, p in enumerate(papers):
-            relevant_map[i] = ""
+        print(f"[分类] JSON解析失败，保留全部为watch：{e}")
+        for i in range(len(papers)):
+            tier_map[i] = "watch"
+            reason_map[i] = ""
 
-    # 过滤掉关联不大的
-    filtered = [(papers[i], relevant_map[i]) for i in relevant_map]
-
-    if not filtered:
-        today = beijing_now().strftime("%Y-%m-%d")
+    if not tier_map:
         return f"📊 经济学研究前沿日报\n{today}\n\n今日暂未找到与你研究相关的论文。"
 
-    # 第二步：生成最终简报
-    report_text = ""
-    for p, use_for in filtered:
-        report_text += f"来源：{p['source']}\n标题：{p['title']}\n摘要：{p['abstract']}\n你能用上：{use_for}\n\n"
+    # ==============================
+    # 按分类分组
+    # ==============================
+    core_papers  = [(papers[i], reason_map[i]) for i, t in tier_map.items() if t == "core"]
+    watch_papers = [(papers[i], reason_map[i]) for i, t in tier_map.items() if t == "watch"]
 
+    def build_section(paper_list):
+        text = ""
+        for p, reason in paper_list:
+            text += f"来源：{p['source']}\n"
+            text += f"标题：{p['title']}\n"
+            text += f"摘要：{p['abstract']}\n"
+            text += f"备注：{reason}\n\n"
+        return text
+
+    core_text  = build_section(core_papers)
+    watch_text = build_section(watch_papers)
+
+    # ==============================
+    # 第二步：AI 生成最终简报
+    # ==============================
     report_prompt = f"""
-以下是与我研究相关的论文及初步分析：
+请生成一份经济学研究前沿日报，分两个板块，每篇按固定格式输出。
 
-{report_text}
+【板块一：与你研究直接相关】
+{core_text if core_text else "今日暂无直接相关论文。\n"}
+【板块二：值得关注】
+{watch_text if watch_text else "今日暂无推荐。\n"}
 
-请生成一份经济学研究前沿日报，对每篇论文按以下格式输出：
+每篇论文统一格式如下：
 
 📄 原标题：xxx
    中文标题：xxx（翻译原标题）
 来源：xxx
-摘要：2-3句话总结研究问题、方法和主要发现
-你能用上：{"{"}具体说明{"}"}
+摘要：2-3句话，总结研究问题、方法、主要发现
+你能用上 / 为什么推给你：xxx
 
 ---
 
-要求：
-- 全程中文（标题保留原文并附翻译）
+输出要求：
+- 板块一标题用：🎯 与你研究直接相关（N篇）
+- 板块二标题用：👀 值得关注（N篇）
+- 全程中文，标题保留英文原文并附中文翻译
 - 语气专业，像科研简报
-- "你能用上"要具体，不要泛泛而谈
+- 板块一的"你能用上"要具体指出能用在哪个环节
+- 板块二的"为什么推给你"一句话点明价值即可
+- 两个板块之间加一条分隔线
 """
 
     report = call_llm(report_prompt)
-    today = beijing_now().strftime("%Y-%m-%d")
     return f"📊 经济学研究前沿日报\n{today}\n\n{report}"
-
+    
 # ==============================
 # AI督促系统
 # ==============================
