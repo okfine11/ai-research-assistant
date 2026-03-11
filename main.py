@@ -265,6 +265,7 @@ def main():
         msg = generate_supervisor_message(tasks)
 
     msg += f"\n\n[系统时间] {today} {hour:02d}:{minute:02d}"
+    print(f'{today} {hour:02d}:{minute:02d}')
     send_feishu(msg)
 
 # ==============================
