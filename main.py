@@ -127,42 +127,84 @@ def generate_paper_report():
         today = beijing_now().strftime("%Y-%m-%d")
         return f"📊 经济学研究前沿日报\n{today}\n\n今日暂未找到相关论文。"
 
-    # 按来源分组，构建 prompt
+    # 构建论文文本
     paper_text = ""
-    by_source = {}
-    for p in papers:
-        by_source.setdefault(p["source"], []).append(p)
+    for i, p in enumerate(papers):
+        paper_text += f"[{i}] 来源：{p['source']}\n标题：{p['title']}\n摘要：{p['abstract']}\n\n"
 
-    for src, items in by_source.items():
-        paper_text += f"\n【{src}】\n"
-        for p in items:
-            paper_text += f"标题：{p['title']}\n"
-            paper_text += f"摘要：{p['abstract']}\n\n"
+    # 第一步：让AI判断关联性，返回JSON
+    filter_prompt = f"""
+我的研究背景：
+{MY_RESEARCH_BACKGROUND}
 
-    prompt = f"""
-你是一个经济学研究助理。以下是今天从多个来源获取的最新论文（含标题和摘要）：
-
+以下论文列表（含编号）：
 {paper_text}
 
-我的研究背景如下：
-{MY_RESEARCH_BACKGROUND}
+请判断每篇论文与我研究的关联性。
+只返回JSON数组，格式如下，不要输出任何其他内容：
+[
+  {{"index": 0, "relevant": true, "use_for": "具体说明能用在哪里（思路/方法/数据/角度）"}},
+  {{"index": 1, "relevant": false, "use_for": ""}}
+]
+
+判断标准：关联较弱或完全无关则 relevant 为 false。
+"""
+
+    import json as json_lib
+    filter_result = call_llm(filter_prompt)
+
+    # 解析JSON，失败则保留全部
+    relevant_map = {}
+    try:
+        clean = filter_result.strip()
+        # 去掉可能的markdown代码块
+        if "```" in clean:
+            clean = clean.split("```")[1]
+            if clean.startswith("json"):
+                clean = clean[4:]
+        items = json_lib.loads(clean)
+        for item in items:
+            if item.get("relevant"):
+                relevant_map[item["index"]] = item.get("use_for", "")
+    except Exception as e:
+        print(f"[过滤] JSON解析失败，保留全部论文：{e}")
+        for i, p in enumerate(papers):
+            relevant_map[i] = ""
+
+    # 过滤掉关联不大的
+    filtered = [(papers[i], relevant_map[i]) for i in relevant_map]
+
+    if not filtered:
+        today = beijing_now().strftime("%Y-%m-%d")
+        return f"📊 经济学研究前沿日报\n{today}\n\n今日暂未找到与你研究相关的论文。"
+
+    # 第二步：生成最终简报
+    report_text = ""
+    for p, use_for in filtered:
+        report_text += f"来源：{p['source']}\n标题：{p['title']}\n摘要：{p['abstract']}\n你能用上：{use_for}\n\n"
+
+    report_prompt = f"""
+以下是与我研究相关的论文及初步分析：
+
+{report_text}
 
 请生成一份经济学研究前沿日报，对每篇论文按以下格式输出：
 
-📄 标题：xxx
+📄 原标题：xxx
+   中文标题：xxx（翻译原标题）
 来源：xxx
 摘要：2-3句话总结研究问题、方法和主要发现
-你能用上：结合我的研究背景，说明这篇论文对我有什么具体帮助（思路/方法/数据/角度等），如果关联不大就直接写"关联较弱"
+你能用上：{"{"}具体说明{"}"}
 
 ---
 
 要求：
-- 全程中文
+- 全程中文（标题保留原文并附翻译）
 - 语气专业，像科研简报
 - "你能用上"要具体，不要泛泛而谈
 """
 
-    report = call_llm(prompt)
+    report = call_llm(report_prompt)
     today = beijing_now().strftime("%Y-%m-%d")
     return f"📊 经济学研究前沿日报\n{today}\n\n{report}"
 
