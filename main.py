@@ -1,7 +1,7 @@
 import os
 import json
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 
 # ==============================
@@ -21,6 +21,9 @@ KEYWORDS = [
     "global value chain"
 ]
 
+def beijing_now():
+    return datetime.utcnow() + timedelta(hours=8)
+    
 # ==============================
 # 读取每日任务
 # ==============================
@@ -161,7 +164,7 @@ def generate_paper_report():
 
     report = call_llm(prompt)
 
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = beijing_now().strftime("%Y-%m-%d")
 
     return f"📊 经济学研究前沿日报\n{today}\n\n{report}"
 
@@ -171,7 +174,7 @@ def generate_paper_report():
 
 def generate_supervisor_message(tasks):
 
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = beijing_now().strftime("%Y-%m-%d")
 
     task_list = tasks.get(today,[])
 
@@ -183,7 +186,7 @@ def generate_supervisor_message(tasks):
 
         task_text = "\n".join(task_list)
 
-    hour = datetime.utcnow().hour
+    hour = beijing_now().hour
 
     # 上午督促
     if hour < 5:
@@ -247,7 +250,7 @@ def main():
 
     tasks = load_tasks()
 
-    hour = datetime.utcnow().hour
+    hour = beijing_now().hour
 
     # 北京时间 09:30
     if hour == 1:
