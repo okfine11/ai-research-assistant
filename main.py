@@ -305,7 +305,7 @@ def generate_supervisor_message(tasks):
         return call_llm(prompt)
 
     else:
-        github_link = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/edit/main/tasks.json"
+        github_link = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}"
         prompt = f"""
 学生今天计划完成：
 
