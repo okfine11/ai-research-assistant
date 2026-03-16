@@ -323,18 +323,20 @@ def generate_supervisor_message(tasks):
 # 主程序
 # ==============================
 
+# 用环境变量标记本次是哪种任务，不依赖时间
+TASK_TYPE = os.getenv("TASK_TYPE", "supervisor")  # 默认督促
+
 def main():
     now = beijing_now()
     today = now.strftime("%Y-%m-%d")
     hour = now.hour
     minute = now.minute
 
-    print(f"[启动] 北京时间：{today} {hour:02d}:{minute:02d}")
+    print(f"[启动] 北京时间：{today} {hour:02d}:{minute:02d}，任务类型：{TASK_TYPE}")
 
     tasks = load_tasks()
 
-    # ✅ 修复：北京时间 09:30（UTC 01:30）发论文简报，其余时间督促
-    if hour == 9 or (hour == 10 and minute <= 30):
+    if TASK_TYPE == "paper":
         msg = generate_paper_report()
     else:
         msg = generate_supervisor_message(tasks)
