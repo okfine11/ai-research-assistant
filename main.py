@@ -334,7 +334,7 @@ def main():
     tasks = load_tasks()
 
     # ✅ 修复：北京时间 09:30（UTC 01:30）发论文简报，其余时间督促
-    if hour == 9 and minute >= 30:
+    if hour == 9 or (hour == 10 and minute <= 30):
         msg = generate_paper_report()
     else:
         msg = generate_supervisor_message(tasks)
