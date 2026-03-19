@@ -334,18 +334,19 @@ def main():
 
     print(f"[启动] 北京时间：{today} {hour:02d}:{minute:02d}，任务类型：{TASK_TYPE}")
 
-    tasks = load_tasks()
+    # tasks = load_tasks()
+    # if TASK_TYPE == "paper":
+    #     msg = generate_paper_report()
+    # else:
+    #     msg = generate_supervisor_message(tasks)
+    # msg += f"\n\n[系统时间] {today} {hour:02d}:{minute:02d}"
+    # print(msg)
+    # send_feishu(msg)
 
-    if TASK_TYPE == "paper":
-        msg = generate_paper_report()
-    else:
-        msg = generate_supervisor_message(tasks)
-
+    msg = generate_paper_report()
     msg += f"\n\n[系统时间] {today} {hour:02d}:{minute:02d}"
     print(msg)
     send_feishu(msg)
-
-
 
 if __name__ == "__main__":
     main()
