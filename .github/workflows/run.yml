@@ -1,14 +1,19 @@
 name: AI Research Assistant
 
 on:
-  workflow_dispatch:  # ✅ 保留手动触发，方便测试
+  workflow_dispatch:
   schedule:
-    # 所有时间为 UTC，北京时间 = UTC+8
-    - cron: '30 1 * * *'   # 北京 09:30 → 论文简报
-    - cron: '0 2 * * *'    # 北京 10:00 → 上午督促
-    - cron: '0 7 * * *'    # 北京 15:00 → 下午督促
-    - cron: '0 13 * * *'   # 北京 21:00 → 晚间总结
-    - cron: '30 7 * * *'
+    - cron: '0 22 * * 1'   # 每周二 北京6:00 → 周报 延迟三个多小时到九点多
+
+# on:
+#   workflow_dispatch:  # ✅ 保留手动触发，方便测试
+#   schedule:
+#     # 所有时间为 UTC，北京时间 = UTC+8
+#     - cron: '30 1 * * *'   # 北京 09:30 → 论文简报
+#     - cron: '0 2 * * *'    # 北京 10:00 → 上午督促
+#     - cron: '0 7 * * *'    # 北京 15:00 → 下午督促
+#     - cron: '0 13 * * *'   # 北京 21:00 → 晚间总结
+#     - cron: '30 7 * * *'
 
 jobs:
   paper-report:
